@@ -1,0 +1,4 @@
+# Prettier also honours .gitignore; these are tracked files it must not touch.
+pnpm-lock.yaml
+.claude/
+apps/frontend/AGENTS.md
