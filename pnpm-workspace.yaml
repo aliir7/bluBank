@@ -27,8 +27,10 @@ engineStrict: true
 strictPeerDependencies: true
 
 # pnpm 12 fails the install when a dependency has a build script that is not
-# explicitly allowed (true) or denied (false) here. No current dependency needs one.
-allowBuilds: {}
+# explicitly allowed (true) or denied (false) here. SWC needs its postinstall
+# script to materialize the platform binary.
+allowBuilds:
+  '@swc/core': true
 
 # pnpm 12 quarantines versions published in the last day (minimumReleaseAge).
 # These pins were newer than that when the repo was bootstrapped on 2026-10-15
