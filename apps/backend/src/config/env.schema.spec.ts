@@ -12,6 +12,7 @@ describe('validateEnv', () => {
       NODE_ENV: 'development',
       HOST: '0.0.0.0',
       PORT: 4000,
+      LOG_LEVEL: 'debug',
       BODY_LIMIT_BYTES: 1_048_576,
       CORS_ORIGINS: [],
       TRUST_PROXY: false,
@@ -20,6 +21,14 @@ describe('validateEnv', () => {
 
   it('coerces valid PORT values to numbers', () => {
     expect(validateEnv({ PORT: '5000' }).PORT).toBe(5000);
+  });
+
+  it('defaults LOG_LEVEL to debug in development and info elsewhere', () => {
+    expect(
+      validateEnv({ NODE_ENV: 'production', CORS_ORIGINS: 'https://app.example' }).LOG_LEVEL,
+    ).toBe('info');
+    expect(validateEnv({ LOG_LEVEL: 'warn' }).LOG_LEVEL).toBe('warn');
+    expect(() => validateEnv({ LOG_LEVEL: '' })).toThrow(/LOG_LEVEL:.*invalid/i);
   });
 
   it('allows a lower body limit but rejects values above 1 MB', () => {
@@ -43,7 +52,7 @@ describe('validateEnv', () => {
 
   it('requires CORS_ORIGINS in production', () => {
     expect(() => validateEnv({ NODE_ENV: 'production' })).toThrow(
-      /CORS_ORIGINS: At least one origin is required in production/,
+      /CORS_ORIGINS: Required in production/,
     );
   });
 

@@ -20,13 +20,13 @@
     "dev": {
       "cache": false,
       "persistent": true,
-      "passThroughEnv": ["PORT"]
+      "passThroughEnv": ["PORT", "LOG_LEVEL"]
     },
     "start": {
       "dependsOn": ["build"],
       "cache": false,
       "persistent": true,
-      "passThroughEnv": ["PORT"]
+      "passThroughEnv": ["PORT", "LOG_LEVEL"]
     },
     "clean": {
       "cache": false

@@ -1,11 +1,16 @@
 import { z } from 'zod';
 
+// The environment may lower the request-body limit but cannot raise it.
+export const MAX_BODY_LIMIT_BYTES = 1024 * 1024;
+
+const logLevelSchema = z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']);
+type LogLevel = z.infer<typeof logLevelSchema>;
+
 export const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'production']).default('development'),
-    HOST: z.string().default('0.0.0.0'),
+    HOST: z.string().min(1).default('0.0.0.0'),
     PORT: z.coerce.number().int().min(1).max(65535).default(4000),
-    BODY_LIMIT_BYTES: z.coerce.number().int().min(1).max(1_048_576).default(1_048_576),
     CORS_ORIGINS: z
       .string()
       .default('')
@@ -13,18 +18,24 @@ export const envSchema = z
         value
           .split(',')
           .map((origin) => origin.trim())
-          .filter(Boolean),
+          .filter((origin) => origin !== ''),
       ),
-    TRUST_PROXY: z.string().default('false').pipe(z.stringbool()),
+    TRUST_PROXY: z.stringbool().default(false),
+    BODY_LIMIT_BYTES: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_BODY_LIMIT_BYTES)
+      .default(MAX_BODY_LIMIT_BYTES),
+    LOG_LEVEL: logLevelSchema.optional(),
   })
-  .superRefine((config, context) => {
-    if (config.NODE_ENV === 'production' && config.CORS_ORIGINS.length === 0) {
-      context.addIssue({
-        code: 'custom',
-        path: ['CORS_ORIGINS'],
-        message: 'At least one origin is required in production',
-      });
-    }
+  .refine((env) => env.NODE_ENV !== 'production' || env.CORS_ORIGINS.length > 0, {
+    path: ['CORS_ORIGINS'],
+    message: 'Required in production',
+  })
+  .transform((env) => {
+    const defaultLogLevel: LogLevel = env.NODE_ENV === 'development' ? 'debug' : 'info';
+    return { ...env, LOG_LEVEL: env.LOG_LEVEL ?? defaultLogLevel };
   });
 
 export type Env = z.infer<typeof envSchema>;
