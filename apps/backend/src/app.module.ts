@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
 
+import { AppConfigModule } from './config/app-config.module.js';
 import { HealthController } from './health.controller.js';
 
 @Module({
-  imports: [],
+  imports: [AppConfigModule],
   controllers: [HealthController],
   providers: [],
 })
