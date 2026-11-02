@@ -5,11 +5,13 @@ import { LoggerModule } from 'nestjs-pino';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { AppConfigModule } from './config/app-config.module.js';
 import { AppConfigService } from './config/app-config.service.js';
+import { EnrollmentsModule } from './enrollments/enrollments.module.js';
 import { HealthController } from './health.controller.js';
 
 @Module({
   imports: [
     AppConfigModule,
+    EnrollmentsModule,
     LoggerModule.forRootAsync({
       imports: [AppConfigModule],
       inject: [AppConfigService],
