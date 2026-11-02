@@ -20,13 +20,29 @@
     "dev": {
       "cache": false,
       "persistent": true,
-      "passThroughEnv": ["PORT", "LOG_LEVEL"]
+      "passThroughEnv": [
+        "PORT",
+        "LOG_LEVEL",
+        "REDIS_HOST",
+        "REDIS_PORT",
+        "REDIS_PASSWORD",
+        "REDIS_DB",
+        "REDIS_KEY_PREFIX"
+      ]
     },
     "start": {
       "dependsOn": ["build"],
       "cache": false,
       "persistent": true,
-      "passThroughEnv": ["PORT", "LOG_LEVEL"]
+      "passThroughEnv": [
+        "PORT",
+        "LOG_LEVEL",
+        "REDIS_HOST",
+        "REDIS_PORT",
+        "REDIS_PASSWORD",
+        "REDIS_DB",
+        "REDIS_KEY_PREFIX"
+      ]
     },
     "clean": {
       "cache": false

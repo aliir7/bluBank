@@ -7,11 +7,13 @@ import { AppConfigModule } from './config/app-config.module.js';
 import { AppConfigService } from './config/app-config.service.js';
 import { EnrollmentsModule } from './enrollments/enrollments.module.js';
 import { HealthController } from './health.controller.js';
+import { RedisModule } from './redis/redis.module.js';
 
 @Module({
   imports: [
     AppConfigModule,
     EnrollmentsModule,
+    RedisModule,
     LoggerModule.forRootAsync({
       imports: [AppConfigModule],
       inject: [AppConfigService],

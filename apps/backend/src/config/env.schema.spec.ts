@@ -16,11 +16,39 @@ describe('validateEnv', () => {
       BODY_LIMIT_BYTES: 1_048_576,
       CORS_ORIGINS: [],
       TRUST_PROXY: false,
+      REDIS_HOST: 'localhost',
+      REDIS_PORT: 6379,
+      REDIS_DB: 0,
+      REDIS_KEY_PREFIX: 'blubank:',
     });
   });
 
   it('coerces valid PORT values to numbers', () => {
     expect(validateEnv({ PORT: '5000' }).PORT).toBe(5000);
+  });
+
+  it('parses Redis connection settings and applies their defaults', () => {
+    expect(
+      validateEnv({
+        REDIS_HOST: 'redis.internal',
+        REDIS_PORT: '6380',
+        REDIS_PASSWORD: 'secret',
+        REDIS_DB: '2',
+        REDIS_KEY_PREFIX: 'app:',
+      }),
+    ).toMatchObject({
+      REDIS_HOST: 'redis.internal',
+      REDIS_PORT: 6380,
+      REDIS_PASSWORD: 'secret',
+      REDIS_DB: 2,
+      REDIS_KEY_PREFIX: 'app:',
+    });
+  });
+
+  it('rejects invalid Redis ports, databases, and empty hosts', () => {
+    expect(() => validateEnv({ REDIS_HOST: '' })).toThrow(/REDIS_HOST/);
+    expect(() => validateEnv({ REDIS_PORT: '65536' })).toThrow(/REDIS_PORT/);
+    expect(() => validateEnv({ REDIS_DB: '-1' })).toThrow(/REDIS_DB/);
   });
 
   it('defaults LOG_LEVEL to debug in development and info elsewhere', () => {

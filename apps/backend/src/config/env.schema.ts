@@ -28,6 +28,12 @@ export const envSchema = z
       .max(MAX_BODY_LIMIT_BYTES)
       .default(MAX_BODY_LIMIT_BYTES),
     LOG_LEVEL: logLevelSchema.optional(),
+    // Redis connection settings; the key prefix isolates this app in shared Redis instances.
+    REDIS_HOST: z.string().min(1).default('localhost'),
+    REDIS_PORT: z.coerce.number().int().min(1).max(65535).default(6379),
+    REDIS_PASSWORD: z.string().optional(),
+    REDIS_DB: z.coerce.number().int().min(0).default(0),
+    REDIS_KEY_PREFIX: z.string().default('blubank:'),
   })
   .refine((env) => env.NODE_ENV !== 'production' || env.CORS_ORIGINS.length > 0, {
     path: ['CORS_ORIGINS'],
