@@ -9,18 +9,13 @@ import {
 import { FastifyReply, FastifyRequest } from 'fastify';
 
 import { AppException } from '../exceptions/app-exception.js';
+import { ApiResponse, createErrorResponse } from '../responses/api-response.js';
 
-export interface ErrorResponse {
+// Describe the exception with an HTTP status and a structured error payload.
+interface DescribedException {
   statusCode: number;
-  error: string;
-  message: string;
-  details?: unknown;
-  path: string;
-  timestamp: string;
-  requestId: string;
+  error: { code: string; message: string; details?: unknown };
 }
-
-type ErrorDescription = Pick<ErrorResponse, 'statusCode' | 'error' | 'message' | 'details'>;
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -31,38 +26,43 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const request = http.getRequest<FastifyRequest>();
     const reply = http.getResponse<FastifyReply>();
 
-    const body: ErrorResponse = {
-      ...this.describe(exception),
-      path: request.url,
-      timestamp: new Date().toISOString(),
-      requestId: request.id,
-    };
-    void reply.status(body.statusCode).send(body);
+    const described = this.describe(exception);
+    const body: ApiResponse<null> = createErrorResponse(described.error, request);
+    void reply.status(described.statusCode).send(body);
   }
 
-  private describe(exception: unknown): ErrorDescription {
+  private describe(exception: unknown): DescribedException {
+    // AppException: explicitly designated client-facing error — expose full message and details
     if (exception instanceof AppException) {
       return {
         statusCode: exception.status,
-        error: exception.code,
-        message: exception.message,
-        ...(exception.details === undefined ? {} : { details: exception.details }),
+        error: {
+          code: exception.code,
+          message: exception.message,
+          ...(exception.details === undefined ? {} : { details: exception.details }),
+        },
       };
     }
 
+    // Nest HttpException subclasses: keep status code but use generic message
     if (exception instanceof HttpException) {
       return {
         statusCode: exception.getStatus(),
-        error: toErrorCode(exception),
-        message: exception.message,
+        error: {
+          code: toErrorCode(exception),
+          message: 'Request failed',
+        },
       };
     }
 
+    // All other exceptions: generic server error, no internal details exposed
     this.logger.error(exception);
     return {
       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-      error: 'INTERNAL_ERROR',
-      message: 'Internal server error',
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'A server error occurred.',
+      },
     };
   }
 }

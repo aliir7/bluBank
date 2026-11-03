@@ -20,24 +20,47 @@ import { AppException } from './../src/common/exceptions/app-exception.js';
 import { ZodValidationPipe } from './../src/common/pipes/zod-validation.pipe.js';
 import { AppConfigService } from './../src/config/app-config.service.js';
 import { REQUEST_ID_HEADER, resolveRequestId } from './../src/logging/request-id.js';
+import { RedisService } from './../src/redis/redis.service.js';
 
 const requestSchema = z.object({
   amount: z.coerce.number().int().positive(),
 });
 
-const validationResponseSchema = z.object({
-  statusCode: z.number(),
-  error: z.string(),
-  message: z.string(),
-  path: z.string(),
-  timestamp: z.iso.datetime(),
-  details: z.array(
-    z.object({
-      path: z.array(z.union([z.string(), z.number()])),
-      message: z.string(),
-    }),
-  ),
-  requestId: z.string(),
+const successResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({ amount: z.number() }),
+  error: z.null(),
+  meta: z.object({
+    timestamp: z.iso.datetime(),
+    requestId: z.string(),
+    path: z.string(),
+  }),
+});
+
+const errorResponseSchema = z.object({
+  success: z.literal(false),
+  data: z.null(),
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    details: z.unknown().optional(),
+  }),
+  meta: z.object({
+    timestamp: z.iso.datetime(),
+    requestId: z.string(),
+    path: z.string(),
+  }),
+});
+
+const healthResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({ status: z.literal('ok') }),
+  error: z.null(),
+  meta: z.object({
+    timestamp: z.iso.datetime(),
+    requestId: z.string(),
+    path: z.string(),
+  }),
 });
 
 @Controller('test')
@@ -113,7 +136,11 @@ describe('HTTP conventions (e2e)', () => {
     const response = await getApp().inject({ method: 'GET', url: '/health' });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ status: 'ok' });
+    const body = healthResponseSchema.parse(JSON.parse(response.body));
+    expect(body.success).toBe(true);
+    expect(body.data).toEqual({ status: 'ok' });
+    expect(body.error).toBeNull();
+    expect(body.meta.requestId).toEqual(expect.any(String));
     expect(response.headers['x-request-id']).toEqual(expect.any(String));
   });
 
@@ -126,7 +153,11 @@ describe('HTTP conventions (e2e)', () => {
     });
 
     expect(response.statusCode).toBe(201);
-    expect(response.json()).toEqual({ amount: 12 });
+    const body = successResponseSchema.parse(JSON.parse(response.body));
+    expect(body.success).toBe(true);
+    expect(body.data).toEqual({ amount: 12 });
+    expect(body.error).toBeNull();
+    expect(body.meta.requestId).toBe('client-request_42');
     expect(response.headers['x-request-id']).toBe('client-request_42');
   });
 
@@ -151,18 +182,23 @@ describe('HTTP conventions (e2e)', () => {
       url: '/api/v1/test/body',
       payload: { amount: 'invalid' },
     });
-    const body = validationResponseSchema.parse(JSON.parse(response.body));
+    const body = errorResponseSchema.parse(JSON.parse(response.body));
 
     expect(response.statusCode).toBe(400);
-    expect(body).toMatchObject({
-      statusCode: 400,
-      error: 'VALIDATION_FAILED',
+    expect(body.success).toBe(false);
+    expect(body.data).toBeNull();
+    expect(body.error).toMatchObject({
+      code: 'VALIDATION_FAILED',
       message: 'Request validation failed',
-      path: '/api/v1/test/body',
     });
-    expect(body.details[0]?.path).toEqual(['amount']);
-    expect(body.details[0]?.message).not.toBe('');
-    expect(body.requestId).toBe(response.headers['x-request-id']);
+    const details = body.error.details as unknown[];
+    expect(details).toHaveLength(1);
+    const detail = details[0] as { path: unknown; message: unknown };
+    expect(detail.path).toEqual(['amount']);
+    expect(typeof detail.message).toBe('string');
+    expect((detail.message as string).length).toBeGreaterThan(0);
+    expect(body.meta.path).toBe('/api/v1/test/body');
+    expect(body.meta.requestId).toBe(response.headers['x-request-id']);
   });
 
   it('preserves an AppException code and status', async () => {
@@ -172,12 +208,14 @@ describe('HTTP conventions (e2e)', () => {
     });
 
     expect(response.statusCode).toBe(409);
-    expect(response.json()).toMatchObject({
-      statusCode: 409,
-      error: 'ACCOUNT_LOCKED',
+    const body = errorResponseSchema.parse(JSON.parse(response.body));
+    expect(body.success).toBe(false);
+    expect(body.data).toBeNull();
+    expect(body.error).toMatchObject({
+      code: 'ACCOUNT_LOCKED',
       message: 'Account is locked',
-      requestId: response.headers['x-request-id'],
     });
+    expect(body.meta.requestId).toBe(response.headers['x-request-id']);
   });
 
   it('formats a Nest HttpException with a machine-readable error code', async () => {
@@ -187,12 +225,14 @@ describe('HTTP conventions (e2e)', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({
-      statusCode: 400,
-      error: 'BAD_REQUEST',
-      message: 'Invalid request',
-      requestId: response.headers['x-request-id'],
+    const body = errorResponseSchema.parse(JSON.parse(response.body));
+    expect(body.success).toBe(false);
+    expect(body.data).toBeNull();
+    expect(body.error).toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Request failed',
     });
+    expect(body.meta.requestId).toBe(response.headers['x-request-id']);
   });
 
   it('does not expose an unexpected error message', async () => {
@@ -202,12 +242,14 @@ describe('HTTP conventions (e2e)', () => {
     });
 
     expect(response.statusCode).toBe(500);
-    expect(response.json()).toMatchObject({
-      statusCode: 500,
-      error: 'INTERNAL_ERROR',
-      message: 'Internal server error',
-      requestId: response.headers['x-request-id'],
+    const body = errorResponseSchema.parse(JSON.parse(response.body));
+    expect(body.success).toBe(false);
+    expect(body.data).toBeNull();
+    expect(body.error).toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'A server error occurred.',
     });
+    expect(body.meta.requestId).toBe(response.headers['x-request-id']);
     expect(response.body).not.toContain('Sensitive internal details');
   });
 
@@ -215,6 +257,10 @@ describe('HTTP conventions (e2e)', () => {
     const response = await getApp().inject({ method: 'GET', url: '/api/v1/unknown' });
 
     expect(response.statusCode).toBe(404);
+    const body = errorResponseSchema.parse(JSON.parse(response.body));
+    expect(body.success).toBe(false);
+    expect(body.data).toBeNull();
+    expect(body.error.code).toBe('NOT_FOUND');
   });
 
   it('returns CORS headers only for allowed origins', async () => {
@@ -236,5 +282,121 @@ describe('HTTP conventions (e2e)', () => {
   afterEach(async () => {
     await app?.close();
     vi.unstubAllEnvs();
+  });
+});
+
+describe('Enrollments challenge (e2e)', () => {
+  let app: NestFastifyApplication | undefined;
+  const setString = vi.fn<(key: string, value: string, ttlSeconds: number) => Promise<void>>();
+
+  function getApp(): NestFastifyApplication {
+    if (!app) {
+      throw new Error('Test application has not been initialized');
+    }
+    return app;
+  }
+
+  beforeEach(async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    setString.mockResolvedValue(undefined);
+    const { AppModule } = await import('./../src/app.module.js');
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(RedisService)
+      .useValue({ setString } satisfies Partial<RedisService>)
+      .compile();
+    const config = moduleFixture.get(AppConfigService);
+
+    app = moduleFixture.createNestApplication<NestFastifyApplication>(
+      new FastifyAdapter({
+        genReqId: (request: IncomingMessage | Http2ServerRequest) =>
+          resolveRequestId(request.headers[REQUEST_ID_HEADER]),
+        trustProxy: config.get('TRUST_PROXY'),
+        bodyLimit: config.get('BODY_LIMIT_BYTES'),
+      }),
+    );
+    app.useLogger(app.get(Logger));
+    app
+      .getHttpAdapter()
+      .getInstance()
+      .addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
+        reply.header(REQUEST_ID_HEADER, request.id);
+      });
+    app.setGlobalPrefix('api', {
+      exclude: [{ path: 'health', method: RequestMethod.GET }],
+    });
+    app.enableVersioning({
+      type: VersioningType.URI,
+      defaultVersion: '1',
+    });
+    await app.init();
+    await app.getHttpAdapter().getInstance().ready();
+  });
+
+  it('stores the OTP in Redis under a unique key with a 2 minute TTL and returns 200', async () => {
+    const response = await getApp().inject({
+      method: 'POST',
+      url: '/api/v1/enrollments/challenge',
+      payload: { phone: '09121234567' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { phone: string; expiresIn: number };
+      error: unknown;
+    };
+    expect(body.success).toBe(true);
+    expect(body.error).toBeNull();
+    expect(body.data).toEqual({ phone: '09121234567', expiresIn: 120 });
+
+    expect(setString).toHaveBeenCalledOnce();
+    const [key, value, ttl] = setString.mock.calls[0] ?? [];
+    expect(key).toMatch(/^otp:[0-9a-f-]{36}$/);
+    expect(value).toMatch(/^[1-9]\d{5}$/);
+    expect(ttl).toBe(120);
+  });
+
+  it('uses a different Redis key for every request', async () => {
+    await getApp().inject({
+      method: 'POST',
+      url: '/api/v1/enrollments/challenge',
+      payload: { phone: '09121234567' },
+    });
+    await getApp().inject({
+      method: 'POST',
+      url: '/api/v1/enrollments/challenge',
+      payload: { phone: '09121234567' },
+    });
+
+    const keys = setString.mock.calls.map(([callKey]) => callKey);
+    expect(keys).toHaveLength(2);
+    expect(new Set(keys).size).toBe(2);
+  });
+
+  it('rejects an invalid Iranian phone number with a validation error', async () => {
+    const response = await getApp().inject({
+      method: 'POST',
+      url: '/api/v1/enrollments/challenge',
+      payload: { phone: '08121234567' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: unknown;
+      error: { code: string };
+    };
+    expect(body.success).toBe(false);
+    expect(body.data).toBeNull();
+    expect(body.error.code).toBe('VALIDATION_FAILED');
+    expect(setString).not.toHaveBeenCalled();
+  });
+
+  afterEach(async () => {
+    await app?.close();
+    vi.unstubAllEnvs();
+    setString.mockReset();
   });
 });

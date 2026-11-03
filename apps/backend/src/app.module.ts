@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
+import { ResultInterceptor } from './common/interceptors/result.interceptor.js';
 import { AppConfigModule } from './config/app-config.module.js';
 import { AppConfigService } from './config/app-config.service.js';
 import { EnrollmentsModule } from './enrollments/enrollments.module.js';
@@ -38,6 +39,9 @@ import { RedisModule } from './redis/redis.module.js';
     }),
   ],
   controllers: [HealthController],
-  providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
+  providers: [
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
+    { provide: APP_INTERCEPTOR, useClass: ResultInterceptor },
+  ],
 })
 export class AppModule {}

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-export const sendOtpSchema = z.object({
+// Same Iranian mobile validation that was used before the route was renamed.
+export const challengeSchema = z.object({
   phone: z
     .string()
     .trim()
@@ -8,4 +9,4 @@ export const sendOtpSchema = z.object({
     .pipe(z.string().regex(/^(\+98|0)?9\d{9}$/, 'Invalid Iranian mobile phone number')),
 });
 
-export type SendOtpInput = z.infer<typeof sendOtpSchema>;
+export type ChallengeInput = z.infer<typeof challengeSchema>;

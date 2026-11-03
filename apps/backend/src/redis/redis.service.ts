@@ -98,4 +98,15 @@ export class RedisService {
   async setNx(key: string, value: string | number, ttlSeconds: number): Promise<boolean> {
     return (await this.client.set(key, value, 'EX', ttlSeconds, 'NX')) === 'OK';
   }
+
+  // Stores a raw string with an expiration, so Redis holds a String value and not JSON.
+  // Read it back with getString().
+  async setString(key: string, value: string, ttlSeconds: number): Promise<void> {
+    await this.client.set(key, value, 'EX', ttlSeconds);
+  }
+
+  // Reads a raw string value; returns null when the key is missing or expired.
+  async getString(key: string): Promise<string | null> {
+    return this.client.get(key);
+  }
 }
