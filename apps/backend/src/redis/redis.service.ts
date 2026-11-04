@@ -109,4 +109,14 @@ export class RedisService {
   async getString(key: string): Promise<string | null> {
     return this.client.get(key);
   }
+
+  // Executes a Lua script on the Redis server. The script runs atomically.
+  // KEYS and ARGV arrays are passed through ioredis to the EVAL command.
+  async eval(
+    script: string,
+    numKeys: number,
+    ...keysAndArgs: (string | number)[]
+  ): Promise<number> {
+    return this.client.eval(script, numKeys, ...keysAndArgs) as Promise<number>;
+  }
 }

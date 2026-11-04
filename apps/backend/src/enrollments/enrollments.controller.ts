@@ -6,7 +6,9 @@ import { ApiFailure, ApiSuccess } from '../common/decorators/api-decorators.js';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe.js';
 import type { ChallengeInput } from './dto/challenge.dto.js';
 import { challengeSchema } from './dto/challenge.dto.js';
-import type { ChallengeResult } from './enrollments.service.js';
+import type { VerifyInput } from './dto/verify.dto.js';
+import { verifySchema } from './dto/verify.dto.js';
+import type { ChallengeResult, VerifyResult } from './enrollments.service.js';
 import { EnrollmentsService } from './enrollments.service.js';
 
 // Zod schema for the challenge result payload (before envelope wrapping)
@@ -17,6 +19,14 @@ const challengeResultSchema = z.object({
 
 // Convert Zod schema to OpenAPI SchemaObject for @ApiBody
 const challengeBodySchema = challengeSchema.toJSONSchema() as SchemaObject;
+
+// Zod schema for the verify result payload
+const verifyResultSchema = z.object({
+  verified: z.literal(true),
+});
+
+// Convert verify schema to OpenAPI SchemaObject for @ApiBody
+const verifyBodySchema = verifySchema.toJSONSchema() as SchemaObject;
 
 @ApiTags('Enrollments')
 @Controller('enrollments')
@@ -40,5 +50,24 @@ export class EnrollmentsController {
     @Body(new ZodValidationPipe(challengeSchema)) body: ChallengeInput,
   ): Promise<ChallengeResult> {
     return this.enrollmentsService.createChallenge(body);
+  }
+
+  @Post('verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verify enrollment challenge (OTP)',
+    description:
+      'Verifies the OTP for the given phone number. The OTP is single-use and is deleted on successful verification. A missing, expired, or wrong code all return the same error.',
+  })
+  @ApiBody({
+    description: 'Verify request with phone and OTP',
+    schema: verifyBodySchema,
+  })
+  @ApiSuccess(HttpStatus.OK, verifyResultSchema)
+  @ApiFailure(HttpStatus.BAD_REQUEST)
+  async verify(
+    @Body(new ZodValidationPipe(verifySchema)) body: VerifyInput,
+  ): Promise<VerifyResult> {
+    return this.enrollmentsService.verifyChallenge(body);
   }
 }
