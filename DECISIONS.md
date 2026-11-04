@@ -222,3 +222,35 @@
 - تست‌های e2e موجود باید به‌روزرسانی شوند (ساختار پاسخ تغییر می‌کند).
 - کنترلرهای موجود (مثل `HealthController`) باید بغل‌شوند یا اینترسپتور به‌صورت سراسری اعمال شود.
 - کلاینت‌های فرانت‌اند و ادمین باید به قرارداد جدید تطبیق داده شوند.
+
+---
+
+## ADR-009: مستندات API با `@nestjs/swagger` و Zod
+
+- **وضعیت:** پیشنهادی
+- **تاریخ:** 2026-11-03
+
+### دلیل
+
+- بک‌اند به مستندات OpenAPI خودکار برای تمام مسیرها نیاز دارد تا کلاینت‌ها بتوانند API را بدون دانشِ کد کاوش کنند.
+- مستندات باید با قرارداد پاسخ یکپارچه (ADR-008) هماهنگ باشند و schémaهای پاسخ‌ها را به‌صورت خودکار از همان schémaهای Zod بسازند تا drift پیش نیاید.
+- Swagger UI باید فقط در محیط development در دسترس باشد تا در production سطح حمله کاهش یابد.
+- نباید از کتابخانه‌های ثالث UI (مثل Scalar یا Redoc) استفاده شود؛ فقط اکوسیستم رسمی NestJS.
+
+### راه‌حل
+
+- استفاده از `@nestjs/swagger` با `DocumentBuilder` و `SwaggerModule.setup('/swagger', ...)` برای Swagger UI بومی.
+- فعال‌سازی Swagger فقط وقتی `NODE_ENV === 'development'`؛ در production مسیر `/swagger` ثبت نمی‌شود.
+- `deepScanRoutes: true` و `operationIdFactory` به‌صورت `${controllerKey}_${methodKey}`.
+- تنظیمات Swagger UI: `persistAuthorization: true`, `docExpansion: 'none'`, `filter: true`, `showRequestDuration: true`, `tryItOutEnabled: true`.
+- استفاده از Zod برای schémaهای OpenAPI با `standardSchema` در `ApiResponse` و `toJSONSchema()` برای `ApiBody`؛ schémaها با interfaceهای `api-response.ts` tie می‌شوند تا drift نکنند.
+- دکوراتورهای سفارشی در `src/common/decorators/api-decorators.ts`: `@ApiAuth`, `@ApiPaginatedResponse`, `@ApiEnvelopeResponse`, `@ApiFailureResponse`.
+- ثبت `@fastify/static` در `main.ts` برای سرو فایل‌های استاتیک.
+- پیکربندی compiler plugin در `nest-cli.json` با `classValidatorShim: true` و `introspectComments: true`.
+
+### هزینه
+
+- وابستگی‌های جدید به بک‌اند: `@nestjs/swagger`, `@fastify/swagger-ui`, `@fastify/static`, `swagger-ui-express` (dev).
+- هر کنترلر و DTO جدید باید دکوراتورهای Swagger مربوطه را داشته باشد تا در مستندات ظاهر شود.
+- schémaهای Zod باید با `toJSONSchema()` به JSON Schema تبدیل شوند که ممکن است تمام typeهای Zod را پوشش ندهد.
+- Swagger UI فقط در development است؛ برای مستندات production باید export spec به‌صورت فایل انجام شود.

@@ -4,6 +4,7 @@ import { Http2ServerRequest } from 'node:http2';
 import { RequestMethod, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 
 import { AppModule } from './app.module.js';
@@ -44,6 +45,43 @@ async function bootstrap(): Promise<void> {
   });
   app.enableCors({ origin: config.get('CORS_ORIGINS') });
   app.enableShutdownHooks();
+
+  // Swagger Documentation (Development Only)
+  if (config.get('NODE_ENV') === 'development') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('bluBank API')
+      .setDescription('bluBank - NestJS backend API documentation')
+      .setVersion('1.0')
+      .addTag('bluBank')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        },
+        'Authorization',
+      )
+      .build();
+
+    const document = SwaggerModule.createDocument(app, swaggerConfig, {
+      deepScanRoutes: true,
+      operationIdFactory: (controllerKey: string, methodKey: string) =>
+        `${controllerKey}_${methodKey}`,
+    });
+
+    SwaggerModule.setup('/swagger', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+        docExpansion: 'none',
+        filter: true,
+        showRequestDuration: true,
+        tryItOutEnabled: true,
+      },
+    });
+
+    nestLogger.log('Swagger documentation available at /swagger', 'Bootstrap');
+  }
+
   await app.listen(config.get('PORT'), config.get('HOST'));
   nestLogger.log(`application is running on ${config.get('PORT').toString()}`, 'Bootstrap');
 }
